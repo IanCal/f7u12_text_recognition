@@ -18,32 +18,35 @@ def getThresholdedImage(img):
     return grey
     
 
-def traverse(seq, onItem):
+def mapSequence(seq, onItem):
+    acc = []
     while seq:
-        onItem(seq)
-        traverse(seq.v_next(), onItem) # Recurse on children
+        acc.append(onItem(seq))
+        acc.extend(mapSequence(seq.v_next(), onItem))
         seq = seq.h_next() # Next sibling
+    return acc
 
-def pasteContoursFromTo(originalImage, onto):
-    def curried(contour):
-        return saveContour(originalImage, onto, contour)
-    return curried
+def getROI(contour):
+    return BoundingRect(list(contour))
 
-def saveContour(originalImage, onto, contour):
-    roi = BoundingRect(list(contour))
-    if (roi[2] < 20 and roi[3] < 20):
-        SetImageROI(onto, roi)
-        SetImageROI(originalImage, roi)
-        Copy(originalImage, onto)
-        ResetImageROI(onto)
-        ResetImageROI(originalImage)
-    
+def recogniseLetterConstructor(sourceImage, letterExamples):
+    def recogniseLetter(roi):
+        SetImageROI(sourceImage, roi)
+        probabilities = map(lambda (letter, image): (letter, similarity(sourceImage, image)), letterExamples)
+        probabilities.sort(reverse=True, key=itemgetter(2))
+        return probabilities[0]
+    return recogniseLetter
+
+def loadLetterExamples():
+    alphabet = map(chr, range(ord('a'), ord('z')+1) + range(ord('A'), ord('Z')+1))
+    return map(lambda letter: (letter, LoadImage("letters/%s.png"%letter)), alphabet)
 
 src = LoadImage("test.png") 
-grey = getGreyScale(src)
 thresholded = getThresholdedImage(src)
 contours = findContours(thresholded)
+rois = mapSequence(contours, getROI)
+letterExamples = loadLetterExamples()
+letterCandidates = filter(lambda (x,y,w,h): (h > 3) and (w < 20 and h < 20), rois)
+letterSuggestions = map(recogniseLetterConstructor(thresholded, letterExamples), letterCandidates)
+letters = filter(lambda (roi, letter, p): p > 0.5, letterSuggestions)
 
-traverse(contours, pasteContoursFromTo(thresholded, grey))
-
-SaveImage("out.png", grey)
