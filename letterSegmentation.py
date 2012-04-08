@@ -1,21 +1,21 @@
 from cv import *
 
 
-src = LoadImageM("test.png") 
-grey = CreateImage(GetSize(src),8,1) 
-backup = CreateImage(GetSize(src),8,1) 
-CvtColor(src,grey,CV_BGR2GRAY)
+def findContours(img):
+    temp = CreateImage(GetSize(src),8,1) 
+    Copy(img, temp)
+    storage = CreateMemStorage(0)
+    return FindContours(temp, storage, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE)
 
-Threshold(grey, grey, 150, 255, CV_THRESH_BINARY_INV)
-Copy(grey, backup)
+def getGreyScale(img):
+    grey = CreateImage(GetSize(src),8,1) 
+    CvtColor(img,grey,CV_BGR2GRAY)
+    return grey
 
-storage = CreateMemStorage(0)
-contours = FindContours(grey, storage, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE)
-
-def boundSize(contour):
-    bound_rect = BoundingRect(list(contour))
-    return (bound_rect[2], bound_rect[3])
-
+def getThresholdedImage(img):
+    grey = getGreyScale(img)
+    Threshold(grey, grey, 150, 255, CV_THRESH_BINARY_INV)
+    return grey
     
 
 def traverse(seq, onItem):
@@ -24,20 +24,26 @@ def traverse(seq, onItem):
         traverse(seq.v_next(), onItem) # Recurse on children
         seq = seq.h_next() # Next sibling
 
+def pasteContoursFromTo(originalImage, onto):
+    def curried(contour):
+        return saveContour(originalImage, onto, contour)
+    return curried
 
-def saveContour(contour):
+def saveContour(originalImage, onto, contour):
     roi = BoundingRect(list(contour))
-    cropped = CreateImage((roi[2], roi[3]), 8, 1)
-    src_region = GetSubRect(backup, roi )
-    Copy(src_region, cropped)
-    SaveImage("lots/%d-%d-%d-%d.png"%(roi[2], roi[3], roi[0], roi[1]), cropped) 
+    if (roi[2] < 20 and roi[3] < 20):
+        SetImageROI(onto, roi)
+        SetImageROI(originalImage, roi)
+        Copy(originalImage, onto)
+        ResetImageROI(onto)
+        ResetImageROI(originalImage)
     
 
+src = LoadImage("test.png") 
+grey = getGreyScale(src)
+thresholded = getThresholdedImage(src)
+contours = findContours(thresholded)
 
-traverse(contours, saveContour)
+traverse(contours, pasteContoursFromTo(thresholded, grey))
 
-#    bound_rect = BoundingRect(list(contour))
-
-    #centers.append(bound_rect[0] + bound_rect[2] / 2, bound_rect[1] + bound_rect[3] / 2)
-
-
+SaveImage("out.png", grey)
